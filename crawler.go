@@ -3,22 +3,25 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/gocolly/colly/v2"
 )
 
 type Crawler struct {
-	collector      *colly.Collector
-	url            string
-	xAxis          int
-	yAxis          int
-	searchDistance int
-	name           string
-	password       string
-	results        []Location
+	collector          *colly.Collector
+	url                string
+	xAxis              int
+	yAxis              int
+	name               string
+	password           string
+	searchDistance     int
+	searchOccupiedLand bool
+	results            []Location
+	m                  sync.Mutex
 }
 
 func (c *Crawler) InitializeCrawler(err Error, r *bufio.Reader) {
@@ -26,28 +29,38 @@ func (c *Crawler) InitializeCrawler(err Error, r *bufio.Reader) {
 
 	c.collector = colly.NewCollector(
 		colly.Async(false), // No async at the start as login is required
-		colly.AllowURLRevisit(),
+		// colly.AllowURLRevisit(),
 	)
 
 	err.error = c.collector.Limit(
 		&colly.LimitRule{
-			DomainGlob:  "*",
-			Delay:       100 * time.Millisecond,
-			Parallelism: 10,
+			DomainGlob: "*",
+			// Delay:       100 * time.Millisecond,
+			Parallelism: 30,
 		},
 	)
 	if err.error != nil {
 		panic(err.Error())
 	}
 
+	c.collector.WithTransport(&http.Transport{
+		IdleConnTimeout:       0,
+		TLSHandshakeTimeout:   0,
+		ExpectContinueTimeout: 0,
+		ResponseHeaderTimeout: 0,
+	})
+
 	// Set error handler
 	c.collector.OnError(func(r *colly.Response, err error) {
 		fmt.Println("Request URL:", r.Request.URL, "failed with response:", r, "\nError:", err)
+		fmt.Println("Body:", r.Body, "\nStatus:", r.StatusCode)
+		fmt.Println("URL:", r.Request.URL.String())
+		_ = c.collector.Visit(r.Request.URL.String())
 	})
 
 	// Set request handler
 	c.collector.OnRequest(func(r *colly.Request) {
-		fmt.Println("Visiting", r.URL)
+		// fmt.Println("Visiting", r.URL)
 	})
 
 	// On response
@@ -56,7 +69,7 @@ func (c *Crawler) InitializeCrawler(err Error, r *bufio.Reader) {
 			err.Set("Login failed!\nPlease check your server URL, login ID and password.")
 			panic(err.Error())
 		}
-		fmt.Println("Visited", r.Request.URL)
+		// fmt.Println("Visited", r.Request.URL)
 	})
 
 	// Set scraping
@@ -167,6 +180,25 @@ func (c *Crawler) getSearchDistance(err Error, r *bufio.Reader) {
 	c.setSearchDistance(err, distance)
 }
 
+func (c *Crawler) getSearchOccupiedLand(err Error, r *bufio.Reader) {
+	err.Set("Failed to get search occupied land")
+
+	var searchOccupiedLandStr string
+	var searchOccupiedLand bool
+	fmt.Print("Do you want to search occupied land? (yes/no) : ")
+
+	searchOccupiedLandStr, err.error = r.ReadString('\n')
+	if err.error != nil {
+		panic(err.Error())
+	}
+
+	if strings.Contains(strings.ToLower(searchOccupiedLandStr), "y") {
+		searchOccupiedLand = true
+	}
+
+	c.setSearchOccupiedLand(searchOccupiedLand)
+}
+
 func (c *Crawler) setURL(url string) {
 	url = strings.TrimSpace(url)
 
@@ -214,6 +246,10 @@ func (c *Crawler) setSearchDistance(err Error, distance int) {
 	c.searchDistance = distance
 }
 
+func (c *Crawler) setSearchOccupiedLand(searchOccupiedLand bool) {
+	c.searchOccupiedLand = searchOccupiedLand
+}
+
 func (c *Crawler) AuthenticateUser(err Error) {
 	err.Set("Failed to login user", c.name, "for server", c.url)
 
@@ -259,6 +295,11 @@ func (c *Crawler) RetrieveMapDetails(e *colly.HTMLElement) {
 	if !e.DOM.Add(queryAll).ChildrenFiltered("td").HasClass("val") {
 		occupiedLand = true
 		queryAll += " td"
+	}
+
+	// If search occupied land set to false and this is an occupied land, return
+	if occupiedLand && !c.searchOccupiedLand {
+		return
 	}
 
 	var resType int
@@ -320,7 +361,11 @@ func (c *Crawler) RetrieveMapDetails(e *colly.HTMLElement) {
 			isOasis,
 		)
 
+		// PrintResult(l)
+
+		c.m.Lock()
 		c.results = append(c.results, l)
+		c.m.Unlock()
 	}
 }
 
@@ -328,10 +373,13 @@ func (c *Crawler) InitializeScrapMap(err Error, r *bufio.Reader) {
 	c.getXAxis(err, r)
 	c.getYAxis(err, r)
 	c.getSearchDistance(err, r)
+	c.getSearchOccupiedLand(err, r)
 }
 
 func (c *Crawler) ScrapMap(err Error) {
 	err.Set("Function scrap map error")
+
+	fmt.Println("Starting search ...")
 
 	// Traverse X-Axis from left to right
 	for x := c.xAxis - c.searchDistance; x <= c.xAxis+c.searchDistance; x++ {

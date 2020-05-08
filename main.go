@@ -39,7 +39,7 @@ func main() {
 
 		fmt.Print("Do you want to continue search? (yes/no): ")
 		continueSearch, _ = r.ReadString('\n')
-		if strings.Contains(continueSearch, "n") {
+		if strings.Contains(strings.ToLower(continueSearch), "n") {
 			fmt.Println("The end\nPress enter to quit")
 			break
 		}
@@ -80,21 +80,26 @@ func PrintResults(locations []Location) {
 	fmt.Println("Printing results:")
 	fmt.Println("--------------------------")
 	for _, v := range locations {
-		fmt.Println("X-Axis:", v.xAxis)
-		fmt.Println("Y-Axis:", v.yAxis)
-		fmt.Println("Oasis:", v.isOasis)
-		if v.nrOfLumber != 0 {
-			fmt.Println("Lumber:", v.Lumber())
-		}
-		if v.nrOfClay != 0 {
-			fmt.Println("Clay:", v.Clay())
-		}
-		if v.nrOfIron != 0 {
-			fmt.Println("Iron:", v.Iron())
-		}
-		if v.nrOfCrop != 0 {
-			fmt.Println("Cropper:", v.Crop())
-		}
-		fmt.Println("--------------------------")
+		PrintResult(v)
 	}
+}
+
+func PrintResult(location Location) {
+	fmt.Println("--------------------------")
+	fmt.Println("X-Axis:", location.xAxis)
+	fmt.Println("Y-Axis:", location.yAxis)
+	fmt.Println("Oasis:", location.isOasis)
+	if location.nrOfLumber != 0 {
+		fmt.Println("Lumber:", location.Lumber())
+	}
+	if location.nrOfClay != 0 {
+		fmt.Println("Clay:", location.Clay())
+	}
+	if location.nrOfIron != 0 {
+		fmt.Println("Iron:", location.Iron())
+	}
+	if location.nrOfCrop != 0 {
+		fmt.Println("Cropper:", location.Crop())
+	}
+	fmt.Println("--------------------------")
 }
