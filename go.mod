@@ -8,6 +8,6 @@ require (
 	github.com/antchfx/xmlquery v1.2.4 // indirect
 	github.com/gocolly/colly/v2 v2.0.1
 	github.com/golang/protobuf v1.4.1 // indirect
-	golang.org/x/net v0.0.0-20200506145744-7e3656a0809f // indirect
+	golang.org/x/net v0.7.0 // indirect
 	google.golang.org/appengine v1.6.6 // indirect
 )
